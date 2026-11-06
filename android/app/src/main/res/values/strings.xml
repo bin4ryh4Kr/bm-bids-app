@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">B&amp;M Bids</string>
+    <string name="title_activity_main">B&amp;M Bids</string>
+    <string name="package_name">com.beautyandmusclepm.bids</string>
+    <string name="custom_url_scheme">com.beautyandmusclepm.bids</string>
+</resources>
