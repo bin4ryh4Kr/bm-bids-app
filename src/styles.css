@@ -110,3 +110,26 @@ button.save{background:var(--accent);color:var(--on);border:0;border-radius:10px
 }
 fieldset.plain{border:0;margin:0;padding:0;min-width:0}
 fieldset.plain:disabled{opacity:.72}
+/* AI panels */
+.ai-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.ai-head h2{margin:0}
+.ai-off{display:flex;flex-direction:column;gap:8px;align-items:flex-start}.ai-off .hint{margin:0}
+.panel.ai .hint{margin:0 0 4px}.ai-count{margin:6px 0 10px!important}
+.thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 2px}
+.thumb{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb button{position:absolute;top:0;right:0;width:36px;height:36px;border:0;background:none;color:#fff;font:700 17px/1 inherit;padding:0;display:grid;place-items:center}
+.thumb button::before{content:"";position:absolute;inset:5px;border-radius:50%;background:rgba(0,0,0,.62);z-index:-1}.thumb button{z-index:0}
+.ai-busy{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--soft);color:var(--deep);font-size:.88rem;font-weight:600;flex:1 1 100%}
+.ai-busy .hint{font-weight:400;display:block}
+.spin{width:18px;height:18px;flex:none;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+.note.bad{border-left-color:var(--bad);color:var(--bad)}
+.ai-result{border:1px solid var(--accent);background:var(--soft);border-radius:12px;padding:12px;margin-top:12px}
+.ai-result-h{font-weight:800;color:var(--deep);margin-bottom:8px}
+.ai-result .stat{background:var(--surface)}.ai-result .stat .v{font-size:1.02rem}
+.ai-addons{margin:0 0 8px;font-size:.84rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ai-notes{margin:0 0 8px;font-size:.9rem}
+.ai-model{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;font-weight:700}
+progress.ai-bar{width:100%;height:10px;appearance:none;-webkit-appearance:none;border:0;border-radius:999px;overflow:hidden;background:var(--line)}
+progress.ai-bar::-webkit-progress-bar{background:var(--line)}progress.ai-bar::-webkit-progress-value{background:var(--accent)}

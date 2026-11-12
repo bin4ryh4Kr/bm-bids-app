@@ -74,7 +74,7 @@ function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set;
   const blank = !main0(r);
   return <>
     {need.length > 0 && <Setup list={need} open={setup} />}
-    {AiBid && <Suspense fallback={null}><AiBid b={b} apply={up} /></Suspense>}
+    {AiBid && <Suspense fallback={null}><AiBid b={b} apply={up} setup={setup} /></Suspense>}
     <section className="panel"><h2>The home</h2><div className="fields">
       <Text wide label="Client name" value={b.client} onChange={v => up({ client: v })} />
       <label className="f wide">Type of clean<select value={b.job} onChange={e => up({ job: e.target.value as Job })}>
