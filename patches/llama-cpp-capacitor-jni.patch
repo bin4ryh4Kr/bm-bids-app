@@ -1,0 +1,55 @@
+--- a/android/src/main/jni.cpp
++++ b/android/src/main/jni.cpp
+@@ -800,17 +800,31 @@
+             
+             LOGI("Loading prompt into completion context...");
+             try {
+-                // Validate sampler is properly initialized before loadPrompt
+-                if (!ctx->completion->ctx_sampling) {
+-                    LOGE("Sampler context is null - reinitializing");
+-                    if (!ctx->completion->initSampling()) {
+-                        LOGE("Failed to reinitialize sampling");
+-                        throw std::runtime_error("Sampler initialization failed");
+-                    }
+-                    LOGI("Sampler reinitialized successfully");
++                // [bm-bids patch] rewind() above clears the grammar, so put it back, then build the sampler again for
++                // this request. It was only built for the first request, so a grammar or temperature sent later was
++                // silently ignored and answers came back as free text.
++                ctx->params.sampling.grammar = grammar_str;
++                if (!ctx->completion->initSampling()) {
++                    LOGE("Failed to initialize sampling");
++                    throw std::runtime_error("Sampler initialization failed");
+                 }
+-                
+-                ctx->completion->loadPrompt({});
++
++                // [bm-bids patch] Pass images to the model. media_paths_json is a JSON array of file paths; each one
++                // fills a <__media__> marker in the prompt. This used to be loadPrompt({}), which dropped all images.
++                std::vector<std::string> media_paths;
++                std::string media_json = jni_utils::jsobject_opt_string(env, params, "media_paths_json", "");
++                if (!media_json.empty() && media_json[0] == '[') {
++                    try {
++                        auto j = nlohmann::json::parse(media_json);
++                        for (const auto& el : j) {
++                            if (el.is_string()) media_paths.push_back(el.get<std::string>());
++                        }
++                    } catch (...) {
++                        LOGE("media_paths_json could not be parsed; continuing without images");
++                    }
++                }
++                LOGI("Loading prompt with %zu image(s)", media_paths.size());
++                ctx->completion->loadPrompt(media_paths);
+                 LOGI("loadPrompt completed successfully");
+             } catch (const std::exception& e) {
+                 LOGE("Exception in loadPrompt: %s", e.what());
+@@ -834,7 +848,9 @@
+                     auto token_output = ctx->completion->nextToken();
+                     
+                     // Check for end-of-sequence (simplified check)
+-                    if (token_output.tok == 2) { // Most models use 2 as EOS token
++                    // [bm-bids patch] Ask the model's own vocabulary whether this token ends the answer. The fixed
++                    // "token 2" check is wrong for most models, which then ran on to the token limit.
++                    if (token_output.tok == -1 || llama_vocab_is_eog(llama_model_get_vocab(ctx->model), token_output.tok)) {
+                         LOGI("Reached EOS token, stopping generation");
+                         break;
+                     }

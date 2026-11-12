@@ -27,6 +27,7 @@
 - **Miles:** track a business drive by GPS or add it by hand, then share a mileage log.
 - **Lock screen:** a PIN, with fingerprint or face unlock where your phone has it.
 - **Your look:** light, dark or automatic, with color choices that carry onto your PDFs.
+- **AI on your phone (optional):** download a model once (2.8 GB) and the app can fill in home details from walkthrough photos, read receipts and write scope descriptions. It runs on the phone itself: no account, no cost, and photos never leave the phone. It needs a recent phone with 8 GB of memory, and it only suggests details; prices always come from your own rate sheet.
 - **Your business, your prices:** set your name, logo, payment details, prices, costs and terms in Settings. New installs start with typical U.S. industry numbers, clearly marked, so you can price a job right away. Replace them with your own in Settings.
 
 No account, no ads, no tracking. Everything stays on your phone, so use Save backup in Settings. The only thing that goes online by itself is Find businesses, which sends the town and type you search to OpenStreetMap. The small line at the bottom of each PDF says the app came from us.
@@ -35,7 +36,7 @@ Nothing in this app is legal, tax or pricing advice. Check your terms and prices
 
 ## Build it
 
-Needs Node. Android also needs JDK 17 and the Android SDK. iPhone needs a Mac with Xcode.
+Needs Node 22 or newer. Android also needs JDK 21 and the Android SDK (platform 36, NDK 29.0.13113456 and CMake 3.22.1, because the on-phone AI engine is compiled from source). iPhone needs a Mac with Xcode.
 
 ```sh
 npm install
