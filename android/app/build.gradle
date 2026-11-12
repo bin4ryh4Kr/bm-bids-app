@@ -3,6 +3,9 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.beautyandmusclepm.bids"
     compileSdk = rootProject.ext.compileSdkVersion
+    // The same NDK the llama.cpp plugin is compiled with. Naming it here lets release builds strip the
+    // engine's debug symbols (86 MB down to a few MB).
+    ndkVersion = "29.0.13113456"
     defaultConfig {
         applicationId "com.beautyandmusclepm.bids"
         minSdkVersion rootProject.ext.minSdkVersion
