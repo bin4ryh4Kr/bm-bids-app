@@ -112,6 +112,14 @@ let ctx: LlamaContext | null = null;
 let loading: Promise<LlamaContext> | null = null;
 let idle: ReturnType<typeof setTimeout> | undefined;
 let busy = false;
+// The engine call still in flight. After a time limit we stop waiting, but the engine only notices the stop between
+// words; while it is still reading a photo it keeps going. Until it really returns, no new answer may start and the
+// model must not be freed, or the app can crash.
+let running: Promise<void> | null = null;
+const scheduleIdle = () => {
+  clearTimeout(idle);
+  idle = setTimeout(() => { if (!busy && !running) unload().catch(() => {}); }, 120000); // give the memory back after two quiet minutes
+};
 
 const filePath = async (path: string, directory: Directory) => (await Filesystem.getUri({ path, directory })).uri.replace(/^file:\/\//, '');
 
@@ -134,6 +142,7 @@ async function load(): Promise<LlamaContext> {
     catch (e) { await c.release().catch(() => {}); throw e; }
     note(`vision loaded in ${secs(t1)}`);
     ctx = c;
+    if (!busy) scheduleIdle(); // a load that outlived its time limit must still give the memory back later
     return c;
   })().finally(() => { loading = null; });
   return loading;
@@ -142,6 +151,7 @@ async function load(): Promise<LlamaContext> {
 /** Frees the memory the model takes (about as much as its download size). */
 export async function unload() {
   clearTimeout(idle);
+  if (running) await running; // never free the model under a running engine call
   const c = ctx; ctx = null;
   if (c) await c.release().catch(() => {});
 }
@@ -173,6 +183,7 @@ export async function askDevice(a: Ask): Promise<unknown> {
   if (!DEVICE_OK) throw new Error('On-phone AI only works in the phone app.');
   if (!(await installed())) throw new Error('Download the AI model in Settings first.');
   if (busy) throw new Error('The AI is still working on the last request.');
+  if (running) throw new Error('The AI is still stopping the last request. Try again in a minute.');
   busy = true;
   clearTimeout(idle);
   const temp: string[] = [];
@@ -206,12 +217,14 @@ export async function askDevice(a: Ask): Promise<unknown> {
     // converter is missing on Android (calling it crashes the app).
     stageNow = images.length ? (images.length > 1 ? 'Reading the photos' : 'Reading the photo') : 'Writing the answer';
     const t2 = Date.now();
-    const r = await within(c.completion({
+    const call = c.completion({
       messages: [{ role: 'system', content: a.system }, { role: 'user', content: text }],
       jinja: true, enable_thinking: false, grammar: schemaToGrammar(schema),
       n_predict: 400, temperature: 0, // no randomness: the same photo should give the same answer
       ...(images.length ? { media_paths_json: JSON.stringify(images) } : {}),
-    } as Parameters<LlamaContext['completion']>[0]), ANSWER_LIMIT, 'timeout', () => { c.stopCompletion().catch(() => {}); }).catch(e => {
+    } as Parameters<LlamaContext['completion']>[0]);
+    running = call.then(() => {}, () => {}).finally(() => { running = null; if (!busy) scheduleIdle(); });
+    const r = await within(call, ANSWER_LIMIT, 'timeout', () => { c.stopCompletion().catch(() => {}); }).catch(e => {
       const m = String((e as Error)?.message);
       note(`answer failed after ${secs(t2)}: ${m.slice(0, 200)}`);
       if (m === 'timeout') throw new Error('The AI took more than 6 minutes, so it was stopped. Try fewer photos, or notes only. Settings has an AI log you can share.');
@@ -222,7 +235,8 @@ export async function askDevice(a: Ask): Promise<unknown> {
     return extractJSON(String(r.content || r.text || ''));
   } finally {
     busy = false; stageNow = '';
-    for (const path of temp) Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(() => {});
-    idle = setTimeout(() => { unload().catch(() => {}); }, 120000); // give the memory back after two quiet minutes
+    // Photo files stay until the engine is done with them.
+    const cleanup = () => { for (const path of temp) Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(() => {}); };
+    if (running) running.then(cleanup); else { cleanup(); scheduleIdle(); }
   }
 }
