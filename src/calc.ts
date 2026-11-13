@@ -21,6 +21,18 @@ export const priceFor = (direct: number, profitPct: number, overheadPct: number,
 
 export type Floor = '' | 'carpet' | 'tile' | 'wood' | 'concrete';
 export const FLOORS: { id: Floor; name: string }[] = [{ id: '', name: 'Same as the space' }, { id: 'carpet', name: 'Carpet' }, { id: 'tile', name: 'Tile / VCT' }, { id: 'wood', name: 'Hardwood' }, { id: 'concrete', name: 'Concrete' }];
+// What a job earns at a chosen price (Floor, Quote this or Start high). base comes from residential() or
+// commercial(); at their own price this gives exactly their perHour, laborPct, profit and margin.
+export function atPrice(base: { hours: number; labor: number; direct: number }, overheadPct: number, price: number, perMonth = 1, sqft = 0) {
+  const overhead = price * overheadPct / 100;
+  const profit = price - base.direct - overhead;
+  return {
+    price, overhead, profit, profitMonth: profit * perMonth, monthly: price * perMonth,
+    perHour: base.hours > 0 ? price / base.hours : 0, laborPct: price > 0 ? base.labor / price * 100 : 0,
+    profitPct: price > 0 ? profit / price * 100 : 0, priceSqft: sqft > 0 ? price / sqft : 0,
+  };
+}
+
 export type Room = { name: string; sqft: number; floor: Floor };
 export type Extra = { name: string; price: number; perYear: number };
 export type ComBid = {

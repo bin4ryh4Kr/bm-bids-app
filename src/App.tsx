@@ -4,7 +4,7 @@ import { bioAvailable, loadLock, saveLock, type LockCfg } from './lock';
 import { LockScreen } from './LockScreen';
 import { applyLook, COLORS, type Look } from './theme';
 import { AiBid, AiEstimate, AiSettings } from './ai/gate';
-import { commercial, comparePlans, DEFAULT_COM, DEFAULT_COSTS, DEFAULT_RES, FLOORS, residential, TRAFFIC, VISIT_PLANS, type Costs, type Extra, type Floor, type Job, type Room } from './calc';
+import { atPrice, commercial, comparePlans, DEFAULT_COM, DEFAULT_COSTS, DEFAULT_RES, FLOORS, residential, TRAFFIC, VISIT_PLANS, type Costs, type Extra, type Floor, type Job, type Room } from './calc';
 import { Contracts, Finder, Pipeline, Schedule, Team, Timesheets, Tools, type ToolTab } from './BusinessScreens';
 import { addDays, balance, blankEstimate, blankInvoice, estimateFromCommercial, estimateFromResidential, invoiceFromEstimate, jobNumber, money, money2, niceDate, repeatInvoice, subtotal, taxOf, today, total, uid, type Client, type Estimate, type Invoice, type Item } from './docs';
 import { Miles, Receipts } from './ExpenseScreens';
@@ -38,15 +38,16 @@ const main0 = (r: { main: { price: number } }) => r.main.price > 0;
 // At least 30% profit, and always above the main quote.
 const startHigh = (high: number, price: number) => Math.max(high, Math.ceil(price * 1.1 / 5) * 5);
 
-// The three quote boxes. Each one can become an estimate, a shared PDF or a shared quote at that price.
+// The three prices. Tapping one only selects it: the numbers, the price card and every button below follow
+// the selected price, and nothing is sent until you tap a button. The choice is kept by position, so after
+// an edit it follows the new Floor / Quote this / Start high instead of an old dollar amount.
 type Tier = { label: string; price: number };
-function Tiers({ tiers, make, shareQuote, pdf }: { tiers: Tier[]; make: (p: number) => void; shareQuote: (p: number) => void; pdf: (p: number) => void }) {
-  const [t, setT] = useState<Tier | null>(null);
-  const run = (f: (p: number) => void) => { const p = t!.price; setT(null); f(p); };
-  return <><div className="range">{tiers.map((x, i) => <button key={x.label} className={i === 1 ? 'mid' : ''} onClick={() => setT(x)}><div className="k">{x.label}</div><div className="v">{money(x.price)}</div></button>)}</div>
-    {t && <div className="modal" role="dialog"><div><h2>{t.label}: {money(t.price)}</h2><p className="hint" style={{ marginTop: 0 }}>Use this price for the quote.</p>
-      <div className="stack"><button className="b" onClick={() => run(make)}>Create estimate</button><button className="b g" onClick={() => run(pdf)}>Share estimate PDF</button><button className="b g" onClick={() => run(shareQuote)}>Share quote</button><button className="b g" onClick={() => setT(null)}>Cancel</button></div></div></div>}</>;
+function Tiers({ tiers, pick, setPick }: { tiers: Tier[]; pick: number; setPick: (i: number) => void }) {
+  return <div className="range pick" role="group" aria-label="Choose a price">{tiers.map((x, i) =>
+    <button key={x.label} className={i === pick ? 'on' : ''} aria-pressed={i === pick} onClick={() => setPick(i)}>
+      <div className="k">{x.label}</div><div className="v">{money(x.price)}</div></button>)}</div>;
 }
+const tierLabels = ['Floor (10% profit)', 'Quote this', 'Start high'];
 
 function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set; go: (e: Estimate, lead?: string) => void; toast: (s: string) => void; setup: () => void; pipe: (l: Partial<Lead>, id: string) => void }) {
   const b = db.res, c = db.costs;
@@ -70,6 +71,10 @@ function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set;
   };
   const shareQuote = async (p: number) => { try { toast(await shareText('Quote', quote(p))); } catch { toast('Could not share.'); } };
   const sharePdf = async (p: number) => { const e = estimateFromResidential(b, c, R, db.estimates, p); go(e, b.leadId); try { await shareFile(`Estimate ${e.number}.pdf`, 'Estimate', estimatePDF(e, db.company, db.preparedBy, db.estimateTerms), 'pdf'); } catch { toast('Could not make the PDF.'); } };
+  const [pick, setPick] = useState(1);
+  const tiers = [r.floor, r.main.price, startHigh(r.high, r.main.price)].map((price, i) => ({ label: tierLabels[i], price }));
+  const p = tiers[pick].price;
+  const at = atPrice({ hours: r.main.hours, labor: r.labor, direct: r.direct }, c.overhead, p, r.rec?.perMonth ?? 1);
   const need = [!R.tiers.some(t => t[1] || t[2] || t[3]) && 'Your prices', !c.wage && 'Your crew pay and costs', !(c.speedStd || c.speedDeep || c.speedMove) && 'Your cleaning speeds'].filter(Boolean) as string[];
   const blank = !main0(r);
   return <>
@@ -105,28 +110,30 @@ function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set;
         {r.rec && <Check label="Repeat add-ons on every visit (otherwise first visit only)" value={b.repeat} onChange={v => up({ repeat: v })} />}</div>
     </section>
     <section className="panel">
-      {!blank && <><div className="stats">
+      {!blank && <><h2>Pick your price</h2>
+      <p className="hint">Tap a price to see what it earns you, then send the one you want.</p>
+      <Tiers tiers={tiers} pick={pick} setPick={setPick} />
+      <div className="stats">
+        <Stat k="You earn per labor hour" v={money2(at.perHour)} pill={rate(at.perHour, r.loaded)} />
+        <Stat k="Labor as % of price" v={Math.round(at.laborPct) + '%'} pill={labor(at.laborPct)} />
+        <Stat k={r.rec ? 'Profit per month' : 'Profit on this job'} v={money(at.profitMonth)} />
         <Stat k={`Time on site, ${r.crew} cleaner${r.crew > 1 ? 's' : ''}`} v={r.onsite.toFixed(1) + ' hrs'} />
-        <Stat k="You earn per labor hour" v={money2(r.perHour)} pill={rate(r.perHour, r.loaded)} />
-        <Stat k="Labor as % of price" v={Math.round(r.laborPct) + '%'} pill={labor(r.laborPct)} />
-        <Stat k={r.rec ? 'Profit per month' : 'Profit on this job'} v={money(r.profitMonth)} />
       </div>
-      <details><summary className="hint">See the cost breakdown</summary><Breakdown r={r} total={r.main.price} label={r.rec ? 'Price per visit' : 'Job price'} /></details>
-      <div className="note">{r.main.price < r.floor ? `This price is under your ${money(r.floor)} floor. Raise it, or pass on the job.` : `This keeps ${Math.round(r.profitPct)}% profit after crew, drive, supplies and overhead.`}
-        {r.rec ? ` Recurring starts with one Deep Clean.` : ''}{r.firstKind === 'move' ? ' Assumes an empty home with water and electricity on.' : ''}</div>
-      <p className="hint">Tap a price to quote it.</p>
-      <Tiers tiers={[{ label: 'Floor (10% profit)', price: r.floor }, { label: 'Quote this', price: r.main.price }, { label: 'Start high', price: startHigh(r.high, r.main.price) }]} make={p => go(estimateFromResidential(b, c, R, db.estimates, p), b.leadId)} shareQuote={p => void shareQuote(p)} pdf={p => void sharePdf(p)} /></>}
+      <details><summary className="hint">See the cost breakdown</summary><Breakdown r={{ ...r, overhead: at.overhead, profit: at.profit }} total={p} label={r.rec ? 'Price per visit' : 'Job price'} /></details>
+      <div className="note">{p < r.floor ? `This price is under your ${money(r.floor)} floor. Raise it, or pass on the job.` : `This keeps ${Math.round(at.profitPct)}% profit after crew, drive, supplies and overhead.`}
+        {r.rec ? ` Recurring starts with one Deep Clean.` : ''}{r.firstKind === 'move' ? ' Assumes an empty home with water and electricity on.' : ''}</div></>}
       <div className="acts">
-        <button className="b" onClick={() => go(estimateFromResidential(b, c, R, db.estimates), b.leadId)}>Create estimate</button>
-        <button className="b g" onClick={() => void shareQuote(r.main.price)}>Share quote</button>
-        <button className="b g" onClick={() => { const m = r.rec?.perMonth ?? 1; pipe({ name: b.client, kind: 'residential', sqft: b.sqft, monthly: Math.round(r.rec ? r.monthly : r.main.price), cost: Math.round((r.direct + r.overhead) * m) }, b.leadId); }}>{b.leadId ? 'Update pipeline' : 'Save to pipeline'}</button>
+        <button className="b" onClick={() => go(estimateFromResidential(b, c, R, db.estimates, blank ? undefined : p), b.leadId)}>{blank ? 'Create estimate' : `Create estimate at ${money(p)}`}</button>
+        {!blank && <button className="b g" onClick={() => void sharePdf(p)}>Share estimate PDF</button>}
+        <button className="b g" onClick={() => void shareQuote(blank ? r.main.price : p)}>Share quote</button>
+        <button className="b g" onClick={() => { const m = r.rec?.perMonth ?? 1; pipe({ name: b.client, kind: 'residential', sqft: b.sqft, monthly: Math.round(blank ? (r.rec ? r.monthly : r.main.price) : at.monthly), cost: Math.round((r.direct + r.overhead) * m) }, b.leadId); }}>{b.leadId ? 'Update pipeline' : 'Save to pipeline'}</button>
       </div>
       <div className="price" style={{ marginTop: 12, marginBottom: 0 }}>
-        <div className="lbl">{r.rec ? 'PRICE PER VISIT' : 'JOB PRICE'}{r.overSheet ? ' (CUSTOM QUOTE)' : ''}</div>
-        <div className="big">{money(r.main.price)}</div>
+        <div className="lbl">{r.rec ? 'PRICE PER VISIT' : 'JOB PRICE'}{r.overSheet ? ' (CUSTOM QUOTE)' : ''}{!blank && pick !== 1 ? ` · ${tierLabels[pick].toUpperCase()}` : ''}</div>
+        <div className="big">{money(p)}</div>
         <div className="row">{r.rec && r.first
-          ? <><span>First Deep Clean <b>{money(r.first.price)}</b></span><span>Monthly <b>{money(r.monthly)}</b></span></>
-          : R.depositPct > 0 && <><span>{R.depositPct}% deposit <b>{money2(r.deposit)}</b></span><span>At arrival <b>{money2(r.balance)}</b></span></>}</div>
+          ? <><span>First Deep Clean <b>{money(r.first.price)}</b></span><span>Monthly <b>{money(at.monthly)}</b></span></>
+          : R.depositPct > 0 && <><span>{R.depositPct}% deposit <b>{money2(p * R.depositPct / 100)}</b></span><span>At arrival <b>{money2(p * (1 - R.depositPct / 100))}</b></span></>}</div>
       </div>
     </section></>;
 }
@@ -141,6 +148,10 @@ function CommercialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set; 
   const text = (p: number) => `${db.company.name || 'Your'} quote${b.client.trim() ? ' - ' + b.client.trim() : ''}\n${SPACE_TYPES[b.space]?.name}, ${r.sqft.toLocaleString('en-US')} sq ft, ${b.restrooms} restroom(s), ${b.visits} visit(s) per week\nPrice per visit: ${money(p)}\nMonthly: ${money(p * r.visitsMo)} (${r.visitsMo.toFixed(1)} visits/month avg)`;
   const shareQuote = async (p: number) => { try { toast(await shareText('Quote', text(p))); } catch { toast('Could not share.'); } };
   const sharePdf = async (p: number) => { const e = estimateFromCommercial(b, c, db.estimates, p); go(e, b.leadId); try { await shareFile(`Estimate ${e.number}.pdf`, 'Estimate', estimatePDF(e, db.company, db.preparedBy, db.estimateTerms), 'pdf'); } catch { toast('Could not make the PDF.'); } };
+  const [pick, setPick] = useState(1);
+  const tiers = [r.floor, r.price, startHigh(r.high, r.price)].map((price, i) => ({ label: tierLabels[i], price }));
+  const p = r.price > 0 ? tiers[pick].price : 0;
+  const at = atPrice({ hours: r.hours, labor: r.labor, direct: r.direct }, c.overhead, p, r.visitsMo, r.sqft);
   const need = [!c.wage && 'Your crew pay and costs', !(c.overhead || c.profit) && 'Your overhead and profit targets'].filter(Boolean) as string[];
   return <>
     {need.length > 0 && <Setup list={need} open={setup} />}
@@ -174,25 +185,28 @@ function CommercialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set; 
       <Num label="Labor hours per visit" value={b.hoursOverride} onChange={v => up({ hoursOverride: v })} /><Num label="Price per sq ft, per visit ($)" value={b.sqftPrice} onChange={v => up({ sqftPrice: v })} /></div>
       {b.sqftPrice > 0 && r.price < r.floor && <div className="note">That price is under your {money(r.floor)} floor.</div>}</details>
     <section className="panel">
-      {r.price > 0 && <><div className="stats">
+      {r.price > 0 && <><h2>Pick your price</h2>
+      <p className="hint">Tap a price to see what it earns you, then send the one you want.</p>
+      <Tiers tiers={tiers} pick={pick} setPick={setPick} />
+      <div className="stats">
+        <Stat k="You earn per labor hour" v={money2(at.perHour)} pill={rate(at.perHour, r.loaded)} />
+        <Stat k="Labor as % of price" v={Math.round(at.laborPct) + '%'} pill={labor(at.laborPct)} />
+        <Stat k="Profit per month" v={money(at.profitMonth)} />
+        <Stat k="Margin after overhead" v={Math.round(at.profitPct) + '%'} />
         <Stat k={r.crew > 1 ? `Time on site, ${r.crew} cleaners` : 'Labor hours per visit'} v={r.onsite.toFixed(1) + ' hrs'} />
-        <Stat k="You earn per labor hour" v={money2(r.perHour)} pill={rate(r.perHour, r.loaded)} />
-        <Stat k="Labor as % of price" v={Math.round(r.laborPct) + '%'} pill={labor(r.laborPct)} />
-        <Stat k="Profit per month" v={money(r.profit * r.visitsMo)} />
-        <Stat k="Margin after overhead" v={Math.round(r.margin) + '%'} />
-        <Stat k="Price per sq ft, per visit" v={'$' + r.priceSqft.toFixed(3)} />
+        <Stat k="Price per sq ft, per visit" v={'$' + at.priceSqft.toFixed(3)} />
       </div>
-      <details><summary className="hint">See the cost breakdown</summary><Breakdown r={r} total={r.price} label="Price per visit" /></details>
+      <details><summary className="hint">See the cost breakdown</summary><Breakdown r={{ ...r, overhead: at.overhead, profit: at.profit }} total={p} label="Price per visit" /></details>
       <details><summary className="hint">Compare schedules</summary><div className="scroll"><table className="rows plans"><tbody><tr><td><b>Schedule</b></td><td>Visit</td><td>Month</td><td>Profit / mo</td></tr>
-        {plans.map(p => <tr key={p.name}><td>{p.name}</td><td>{money(p.perVisit)}</td><td>{money(p.monthly)}</td><td>{money(p.profitMonth)}</td></tr>)}</tbody></table></div></details>
-      <p className="hint">Tap a price to quote it.</p>
-      <Tiers tiers={[{ label: 'Floor (10% profit)', price: r.floor }, { label: 'Quote this', price: r.price }, { label: 'Start high', price: startHigh(r.high, r.price) }]} make={p => go(estimateFromCommercial(b, c, db.estimates, p), b.leadId)} shareQuote={p => void shareQuote(p)} pdf={p => void sharePdf(p)} /></>}
-      <div className="acts"><button className="b" onClick={() => go(estimateFromCommercial(b, c, db.estimates), b.leadId)}>Create estimate</button>
-        <button className="b g" onClick={() => void shareQuote(r.price)}>Share quote</button>
-        <button className="b g" onClick={() => pipe({ name: b.client, kind: 'commercial', sqft: r.sqft, monthly: Math.round(r.monthly), cost: Math.round(r.costMonth + r.overhead * r.visitsMo) }, b.leadId)}>{b.leadId ? 'Update pipeline' : 'Save to pipeline'}</button>
+        {plans.map(x => <tr key={x.name}><td>{x.name}</td><td>{money(x.perVisit)}</td><td>{money(x.monthly)}</td><td>{money(x.profitMonth)}</td></tr>)}</tbody></table></div></details>
+      {p < r.floor && <div className="note">This price is under your {money(r.floor)} floor. Raise it, or pass on the job.</div>}</>}
+      <div className="acts"><button className="b" onClick={() => go(estimateFromCommercial(b, c, db.estimates, r.price > 0 ? p : undefined), b.leadId)}>{r.price > 0 ? `Create estimate at ${money(p)}` : 'Create estimate'}</button>
+        {r.price > 0 && <button className="b g" onClick={() => void sharePdf(p)}>Share estimate PDF</button>}
+        <button className="b g" onClick={() => void shareQuote(r.price > 0 ? p : r.price)}>Share quote</button>
+        <button className="b g" onClick={() => pipe({ name: b.client, kind: 'commercial', sqft: r.sqft, monthly: Math.round(r.price > 0 ? at.monthly : r.monthly), cost: Math.round(r.costMonth + r.overhead * r.visitsMo) }, b.leadId)}>{b.leadId ? 'Update pipeline' : 'Save to pipeline'}</button>
         {r.price > 0 && <button className="b g" onClick={async () => { try { await shareFile(`Job cost ${b.client || 'job'}.pdf`, 'Internal job cost', jobCostPDF(b, r, db.company), 'pdf'); } catch { toast('Could not make the PDF.'); } }}>Internal job cost PDF</button>}</div>
-      <div className="price" style={{ marginTop: 12, marginBottom: 0 }}><div className="lbl">PRICE PER VISIT</div><div className="big">{money(r.price)}</div>
-        <div className="row"><span>Monthly <b>{money(r.monthly)}</b></span><span>Yearly <b>{money(r.yearly)}</b></span>{b.taxPct > 0 && <span>Sales tax <b>{money2(r.taxVisit)}</b> a visit, added on top</span>}</div></div>
+      <div className="price" style={{ marginTop: 12, marginBottom: 0 }}><div className="lbl">PRICE PER VISIT{r.price > 0 && pick !== 1 ? ` · ${tierLabels[pick].toUpperCase()}` : ''}</div><div className="big">{money(p)}</div>
+        <div className="row"><span>Monthly <b>{money(at.monthly)}</b></span><span>Yearly <b>{money(at.monthly * 12)}</b></span>{b.taxPct > 0 && <span>Sales tax <b>{money2(p * b.taxPct / 100)}</b> a visit, added on top</span>}</div></div>
     </section></>;
 }
 
@@ -513,13 +527,15 @@ export default function App() {
     if (l) set(d => ({ ...d, leads: d.leads.map(x => x.id === leadId ? { ...x, estimateId: e.id, stage: x.stage === 'Prospect' || x.stage === 'Contacted' ? 'Quoted' : x.stage } : x) }));
     setSub(''); setInv(null); setEst(e); setTab('est');
   };
+  // Saves the lead and the bid behind it, then opens the Pipeline so you can see where it went.
   const pipe = (o: Partial<Lead>, id: string) => {
     const has = id && db.leads.some(l => l.id === id);
-    if (has) { set(d => ({ ...d, leads: d.leads.map(l => l.id === id ? { ...l, ...o, name: o.name || l.name } : l) })); toast('Pipeline updated.'); return; }
-    if (!o.name?.trim()) { toast('Add a client name first.'); return; }
-    const l = blankLead({ ...o, stage: 'Quoted' });
-    const link = o.kind === 'commercial' ? { com: { ...db.com, leadId: l.id } } : { res: { ...db.res, leadId: l.id } };
-    set(d => ({ ...d, ...link, leads: [l, ...d.leads] })); toast('Saved to your pipeline.');
+    if (!has && !o.name?.trim()) { toast('Add a client name first.'); return; }
+    const leadId = has ? id : uid();
+    if (has) set(d => ({ ...d, leads: d.leads.map(l => l.id === id ? { ...l, ...o, name: o.name || l.name } : l) }));
+    else set(d => ({ ...d, leads: [blankLead({ ...o, id: leadId, stage: 'Quoted' }), ...d.leads] }));
+    saveBid(leadId);
+    open('pipe'); toast(has ? 'Pipeline updated. The bid is saved too.' : 'Saved to your pipeline. The bid is saved too.');
   };
   const price = (l: Lead) => {
     if (l.kind === 'commercial') set(d => ({ ...d, com: { ...DEFAULT_COM, space: d.com.space, client: l.name, sqft: l.sqft, leadId: l.id } }));
@@ -539,21 +555,27 @@ export default function App() {
   const toInv = (i: Invoice) => { setEst(null); setInv(i); setTab('inv'); };
   const open = (t: Tab) => { setEst(null); setInv(null); setSub(''); setTab(t); };
   const biz = { db, set, toast, ask, sub, setSub };
-  const saveBid = () => {
-    const id = (mode === 'com' ? db.com.bidId : db.res.bidId) || uid();
+  // Built from the latest data inside set(), so a lead just added above is linked to the saved bid.
+  const saveBid = (leadId?: string) => {
     const name = (mode === 'com' ? db.com.client : db.res.client).trim() || `Bid ${niceDate(today())}`;
-    const price = mode === 'com' ? commercial(db.com, db.costs).price : residential(db.res, db.costs, db.rates).main.price;
-    const bid: SavedBid = mode === 'com' ? { id, name, mode, date: today(), price, com: { ...db.com, bidId: id } } : { id, name, mode, date: today(), price, res: { ...db.res, bidId: id } };
-    set(d => ({ ...d, ...(mode === 'com' ? { com: { ...d.com, bidId: id } } : { res: { ...d.res, bidId: id } }), bids: [bid, ...d.bids.filter(x => x.id !== id)] }));
+    set(d => {
+      const cur = mode === 'com' ? d.com : d.res;
+      const id = cur.bidId || uid();
+      const link = { bidId: id, ...(leadId ? { leadId } : {}) };
+      const price = mode === 'com' ? commercial(d.com, d.costs).price : residential(d.res, d.costs, d.rates).main.price;
+      const bid: SavedBid = mode === 'com' ? { id, name, mode, date: today(), price, com: { ...d.com, ...link } } : { id, name, mode, date: today(), price, res: { ...d.res, ...link } };
+      return { ...d, ...(mode === 'com' ? { com: { ...d.com, ...link } } : { res: { ...d.res, ...link } }), bids: [bid, ...d.bids.filter(x => x.id !== id)] };
+    });
     return name;
   };
+  // On the Bid tab, Save files the bid under Saved bids and opens a fresh one. Elsewhere it just saves.
   const saveNow = async () => {
-    const name = tab === 'bid' ? saveBid() : '';
-    try { await saveDB(db); toast(name ? `Saved ${name}.` : 'Saved.'); } catch { toast('Could not save.'); }
+    if (tab === 'bid') { const name = saveBid(); newBid(true); toast(`Saved ${name}. Started a new bid.`); return; }
+    try { await saveDB(db); toast('Saved.'); } catch { toast('Could not save.'); }
   };
   saver.current = saveNow;
   const openBid = (x: SavedBid) => { set(d => ({ ...d, ...(x.com ? { com: { ...DEFAULT_COM, ...x.com } } : {}), ...(x.res ? { res: { ...DEFAULT_RES, ...x.res } } : {}) })); setMode(x.mode); toast(`Opened ${x.name}.`); };
-  const newBid = () => { set(d => mode === 'com' ? { ...d, com: { ...DEFAULT_COM } } : { ...d, res: { ...DEFAULT_RES, addOns: {} } }); toast('New bid.'); };
+  const newBid = (quiet = false) => { set(d => mode === 'com' ? { ...d, com: { ...DEFAULT_COM } } : { ...d, res: { ...DEFAULT_RES, addOns: {} } }); scroller.current?.scrollTo(0, 0); if (!quiet) toast('New bid.'); };
   const unpaid = db.invoices.filter(i => i.status === 'Unpaid');
   const setup = !db.company.name && <div className="note">Add your business name in <a href="#" style={{ color: 'var(--deep)' }} onClick={e => { e.preventDefault(); open('set'); }}>Settings</a> so it prints on your PDFs.</div>;
 
@@ -564,7 +586,7 @@ export default function App() {
         {db.bids.length > 0 && <details className="panel"><summary><b>Saved bids</b> <span className="hint">({db.bids.length})</span></summary>
           {db.bids.map(x => <div className="addon" key={x.id}><button className="linkrow" onClick={() => openBid(x)}><b>{x.name}</b><span className="hint">{x.mode === 'com' ? 'Commercial' : 'Residential'} · {niceDate(x.date)} · {money(x.price)}</span></button>
             <button className="b x" onClick={() => ask(`Delete saved bid ${x.name}?`, () => set(d => ({ ...d, bids: d.bids.filter(y => y.id !== x.id) })))}>Delete</button></div>)}
-          <button className="b g" style={{ width: '100%', marginTop: 8 }} onClick={newBid}>Start a new bid</button></details>}
+          <button className="b g" style={{ width: '100%', marginTop: 8 }} onClick={() => newBid()}>Start a new bid</button></details>}
         {usingIndustry(db.rates) && <div className="note">These are typical industry numbers, not yours yet. Change them in <a href="#" style={{ color: 'var(--deep)' }} onClick={e => { e.preventDefault(); open('set'); }}>Settings</a>.</div>}
         <div className="seg"><button className={mode === 'res' ? 'on' : ''} onClick={() => setMode('res')}>Residential</button><button className={mode === 'com' ? 'on' : ''} onClick={() => setMode('com')}>Commercial</button></div>
         {mode === 'res' ? <ResidentialBid db={db} set={set} go={toEst} toast={toast} setup={() => open('set')} pipe={pipe} /> : <CommercialBid db={db} set={set} go={toEst} toast={toast} setup={() => open('set')} pipe={pipe} />}</>}
