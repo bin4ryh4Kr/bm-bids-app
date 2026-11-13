@@ -1,6 +1,52 @@
 --- a/android/src/main/jni.cpp
 +++ b/android/src/main/jni.cpp
-@@ -800,17 +800,31 @@
+@@ -250,6 +250,29 @@
+ // Global context storage - fix namespace
+ static std::map<jlong, std::unique_ptr<capllama::llama_cap_context>> contexts;
+ static jlong next_context_id = 1;
++
++// [bm-bids patch] How many cores are "fast": those whose top speed is at least 70% of the fastest core's.
++// Phones mix fast and slow cores; running math on the slow ones makes everything wait for them.
++static int bm_fast_core_count() {
++    std::vector<long> freqs;
++    for (int i = 0; i < 64; i++) {
++        std::ifstream f("/sys/devices/system/cpu/cpu" + std::to_string(i) + "/cpufreq/cpuinfo_max_freq");
++        long v = 0;
++        if (!(f >> v)) break;
++        freqs.push_back(v);
++    }
++    if (freqs.empty()) {
++        unsigned int n = std::thread::hardware_concurrency();
++        return n > 4 ? (int)n - 2 : (n > 1 ? (int)n : 2);
++    }
++    long top = 0;
++    for (long v : freqs) if (v > top) top = v;
++    int fast = 0;
++    for (long v : freqs) if (v * 10 >= top * 7) fast++;
++    if (fast < 2) fast = 2;
++    if (fast > 8) fast = 8;
++    return fast;
++}
+ 
+ static void apply_params_from_jsobject(JNIEnv* env, jobject params, common_params& cparams) {
+     if (params == nullptr) {
+@@ -274,6 +297,15 @@
+             readInt("n_ctx", cparams.n_ctx);
+             readInt("n_batch", cparams.n_batch);
+             readInt("n_gpu_layers", cparams.n_gpu_layers);
++            // [bm-bids patch] n_threads was never read, so the engine used every core. On a phone that
++            // includes the slow efficiency cores, and each step then waits for the slowest thread.
++            // Use the caller's number, or count the fast cores ourselves.
++            int n_threads = 0;
++            readInt("n_threads", n_threads);
++            if (n_threads <= 0) n_threads = bm_fast_core_count();
++            cparams.cpuparams.n_threads = n_threads;
++            cparams.cpuparams_batch.n_threads = n_threads;
++            LOGI("Using %d threads", n_threads);
+         } else if (env->ExceptionCheck()) {
+             env->ExceptionClear();
+         }
+@@ -800,17 +832,31 @@
              
              LOGI("Loading prompt into completion context...");
              try {
@@ -42,7 +88,7 @@
                  LOGI("loadPrompt completed successfully");
              } catch (const std::exception& e) {
                  LOGE("Exception in loadPrompt: %s", e.what());
-@@ -834,7 +848,9 @@
+@@ -834,7 +880,9 @@
                      auto token_output = ctx->completion->nextToken();
                      
                      // Check for end-of-sequence (simplified check)
@@ -53,3 +99,33 @@
                          LOGI("Reached EOS token, stopping generation");
                          break;
                      }
+--- a/android/src/main/CMakeLists.txt
++++ b/android/src/main/CMakeLists.txt
+@@ -23,6 +23,11 @@
+     ${LLAMACPP_LIB_DIR}/ggml-cpu/ggml-cpu.c
+     ${LLAMACPP_LIB_DIR}/ggml-cpu/ggml-cpu.cpp
+     ${LLAMACPP_LIB_DIR}/ggml-cpu/quants.c
++    # [bm-bids patch] The ARM-optimised kernels. Without these (and with LM_GGML_CPU_GENERIC below) every
++    # quantised matrix multiply ran as plain C, which is many times slower on a real phone.
++    ${LLAMACPP_LIB_DIR}/ggml-cpu/arch/arm/quants.c
++    ${LLAMACPP_LIB_DIR}/ggml-cpu/arch/arm/repack.cpp
++    ${LLAMACPP_LIB_DIR}/ggml-cpu/arch/arm/cpu-feats.cpp
+     ${LLAMACPP_LIB_DIR}/ggml-cpu/traits.cpp
+     ${LLAMACPP_LIB_DIR}/ggml-cpu/repack.cpp
+     ${LLAMACPP_LIB_DIR}/ggml-cpu/unary-ops.cpp
+@@ -103,12 +108,13 @@
+ 
+     # ARM64 specific compile options for real devices
+     target_compile_options(${target_name} PRIVATE
+-        -march=armv8-a
++        # [bm-bids patch] ARMv8.2 with dot-product and half-float: every phone CPU since about 2018
++        # (Cortex-A75/A76 and newer). LM_GGML_CPU_GENERIC removed so the NEON kernels are used.
++        -march=armv8.2-a+dotprod+fp16
+         -mtune=cortex-a76
+         -O3
+         -DNDEBUG
+         -DLM_GGML_USE_CPU
+-        -DLM_GGML_CPU_GENERIC
+         -fno-finite-math-only
+         -funroll-loops
+     )

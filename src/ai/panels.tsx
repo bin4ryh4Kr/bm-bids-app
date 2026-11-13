@@ -6,7 +6,8 @@ import { loadPhoto, type Receipt } from '../expenses';
 import { ADD_ONS } from '../rates';
 import { askJSON } from './client';
 import { defaults, loadAi, ready, saveAi, type AiConfig } from './config';
-import { DEVICE_OK, gb, install, installed, isDownloading, MODEL, modelBytes, remove } from './device';
+import { clearDiagnostics, DEVICE_OK, diagnostics, gb, install, installed, isDownloading, MODEL, modelBytes, remove, stage } from './device';
+import { shareText } from '../share';
 import { applyHome, readHome, readReceiptAI, writeScope, type HomeGuess } from './tasks';
 
 const useAi = () => {
@@ -25,7 +26,7 @@ const useElapsed = (on: boolean) => {
   useEffect(() => { if (!on) return; setS(0); const t = setInterval(() => setS(x => x + 1), 1000); return () => clearInterval(t); }, [on]);
   return s;
 };
-const Working = ({ secs, photos }: { c?: AiConfig; secs: number; photos?: boolean }) => <div className="ai-busy" role="status"><span className="spin" /><span>{`Working on this phone... ${clock(secs)}`}{photos ? <span className="hint"> Photos can take a minute or two.</span> : null}</span></div>;
+const Working = ({ secs, photos }: { c?: AiConfig; secs: number; photos?: boolean }) => <div className="ai-busy" role="status"><span className="spin" /><span>{`${stage() || 'Working on this phone'}... ${clock(secs)}`}<span className="hint"> {photos ? 'Photos can take a few minutes on the phone.' : 'The first answer also loads the model.'} Keep the app open.</span></span></div>;
 
 const shrink = (f: File) => new Promise<string>((ok, no) => {
   const img = new Image();
@@ -64,7 +65,9 @@ function DeviceModelCard({ c, up, toast }: { c: AiConfig; up: (o: Partial<AiConf
     <div className="acts">
       {!have && done === null && <button className="b" onClick={start}>Download AI model</button>}
       {have && <button className="b g" onClick={async () => { await remove(); up({ deviceModel: '' }); toast('AI model removed.'); }}>Remove model</button>}
+      {have && <button className="b g" onClick={async () => { try { toast(await shareText('B&M Bids AI log', diagnostics())); } catch { toast('Could not share the log.'); } }}>Share AI log</button>}
     </div>
+    {have && <p className="hint">The AI log holds timings and errors only, never your photos or notes. Share it if the AI is slow or stops. <button className="linkb" style={{ minHeight: 0, padding: 0, margin: 0 }} onClick={() => { clearDiagnostics(); toast('AI log cleared.'); }}>Clear log</button></p>}
   </div>;
 }
 

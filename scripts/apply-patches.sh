@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Applies our fixes to the llama.cpp plugin after every npm install. Safe to run twice.
-# Plugin 0.2.2's Android code drops images, ignores grammars after the first request and misses end-of-answer.
+# Plugin 0.2.2's Android code drops images, ignores grammars after the first request and misses end-of-answer,
+# builds the engine without its ARM-optimised kernels, and runs on every core including the slow ones.
 set -e
 cd "$(dirname "$0")/.."
 target=node_modules/llama-cpp-capacitor

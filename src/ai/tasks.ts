@@ -33,7 +33,7 @@ export async function readReceiptAI(c: AiConfig, image: string): Promise<Receipt
   const r = await askJSON(c, {
     system: 'You read store receipts for a cleaning business. Copy only what is printed. Use an empty string or 0 for anything unreadable.',
     prompt: 'Read this receipt. merchant is the store name printed at the top. date is the purchase date printed on the receipt, written as YYYY-MM-DD. total is the final amount paid. category is what was bought: cleaning products, chemicals, cloths, mops, gloves and trash liners are Supplies; machines and tools are Equipment & tools; gas is Fuel; car repairs and parts are Vehicle; food and drinks are Meals; use Other when unsure.',
-    images: [image],
+    images: [image], detail: 'high',
     schema: obj({ merchant: { type: 'string' }, date: { type: 'string', format: 'date' }, total: { type: 'number' }, category: { type: 'string', enum: CATEGORIES } }),
   }) as Partial<ReceiptGuess>;
   return { merchant: String(r.merchant || '').slice(0, 60), date: /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) ? String(r.date) : '', total: Math.max(0, Number(r.total) || 0), category: CATEGORIES.includes(String(r.category)) ? String(r.category) : 'Other' };

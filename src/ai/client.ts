@@ -1,6 +1,7 @@
 import type { AiConfig } from './config';
 
-export type Ask = { system: string; prompt: string; images?: string[]; schema: Record<string, unknown> };
+// detail 'high' keeps photos large enough to read small print (receipts); the default suits rooms and is faster on a phone.
+export type Ask = { system: string; prompt: string; images?: string[]; schema: Record<string, unknown>; detail?: 'high' };
 
 export function extractJSON(text: string): unknown {
   const a = text.indexOf('{'), b = text.lastIndexOf('}');

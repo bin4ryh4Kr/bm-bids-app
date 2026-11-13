@@ -81,6 +81,32 @@ export async function remove() {
   await Filesystem.rmdir({ path: DIR, directory: Directory.Data, recursive: true }).catch(() => {});
 }
 
+// ── What it is doing, and a log to share when it misbehaves ───────────────────
+let stageNow = '';
+/** A short line for the screen: 'Loading the AI model', 'Reading the photo', 'Writing the answer'. */
+export const stage = () => stageNow;
+const LOG_KEY = 'bm-bids-ai-log';
+let log: string[] = (() => { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; } })();
+function note(line: string) {
+  log = [...log, `${new Date().toISOString().slice(5, 19).replace('T', ' ')}  ${line}`].slice(-120);
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); } catch { /* storage full: keep it in memory */ }
+}
+const secs = (t0: number) => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+/** Timings and errors only. No photos, notes or answers are ever written here. */
+export function diagnostics() {
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  return [`B&M Bids on-phone AI log`, `model ${MODEL.id}`, `phone ${nav.userAgent.replace(/^.*?\((.*?)\).*$/, '$1')}`,
+    `cores ${nav.hardwareConcurrency ?? '?'}, memory hint ${nav.deviceMemory ?? '?'} GB`, '', ...log].join('\n');
+}
+export const clearDiagnostics = () => { log = []; try { localStorage.removeItem(LOG_KEY); } catch { /* nothing to clear */ } };
+
+// Fails with a clear message instead of leaving the screen spinning.
+const within = <T>(p: Promise<T>, ms: number, message: string, onLate?: () => void) => new Promise<T>((ok, no) => {
+  const t = setTimeout(() => { onLate?.(); no(new Error(message)); }, ms);
+  p.then(v => { clearTimeout(t); ok(v); }, e => { clearTimeout(t); no(e); });
+});
+const LOAD_LIMIT = 3 * 60_000, ANSWER_LIMIT = 6 * 60_000;
+
 // ── Running it ───────────────────────────────────────────────────────────────
 let ctx: LlamaContext | null = null;
 let loading: Promise<LlamaContext> | null = null;
@@ -94,15 +120,19 @@ async function load(): Promise<LlamaContext> {
   loading ??= (async () => {
     const { initLlama } = await import('llama-cpp-capacitor');
     const [model, vision] = await Promise.all(MODEL.files.map(f => filePath(at(f), Directory.Data)));
-    const cores = navigator.hardwareConcurrency || 4;
-    const c = await initLlama({ model, n_ctx: 4096, n_batch: 512, n_threads: Math.max(2, Math.min(6, cores - 2)), n_gpu_layers: 0, use_mmap: true });
+    const t0 = Date.now();
+    // No n_threads: the patched engine counts the phone's fast cores itself and leaves the slow ones idle.
+    const c = await initLlama({ model, n_ctx: 4096, n_batch: 512, n_gpu_layers: 0, use_mmap: true });
     // Plugin 0.2.2 on Android hands the model details back as one flat string, and its own chat code then crashes
     // reading chatTemplates. Give it the shape it expects (this model has a standard built-in chat template).
     const m = c.model as unknown;
     if (!m || typeof m !== 'object' || !(m as { chatTemplates?: unknown }).chatTemplates)
       (c as unknown as { model: unknown }).model = { chatTemplates: { llamaChat: true, minja: { default: true, toolUse: false } } };
+    note(`model loaded in ${secs(t0)}`);
+    const t1 = Date.now();
     try { await c.initMultimodal({ path: vision, use_gpu: false }); }
     catch (e) { await c.release().catch(() => {}); throw e; }
+    note(`vision loaded in ${secs(t1)}`);
     ctx = c;
     return c;
   })().finally(() => { loading = null; });
@@ -148,14 +178,21 @@ export async function askDevice(a: Ask): Promise<unknown> {
   const temp: string[] = [];
   try {
     let c: LlamaContext;
-    try { c = await load(); }
+    const started = Date.now();
+    note(`ask: ${(a.images || []).length} photo(s), ${a.prompt.length} characters${ctx ? ', model already loaded' : ''}`);
+    stageNow = ctx ? 'Getting ready' : 'Loading the AI model';
+    try { c = await within(load(), LOAD_LIMIT, 'timeout'); }
     catch (e) {
-      if (/INSUFFICIENT_MEMORY/.test(String((e as Error)?.message))) throw new Error('Not enough free memory to start the AI right now. Close other apps and try again. Phones with less than 8 GB of memory may not manage it.');
+      const m = String((e as Error)?.message);
+      note(`load failed after ${secs(started)}: ${m.slice(0, 200)}`);
+      if (/INSUFFICIENT_MEMORY/.test(m)) throw new Error('Not enough free memory to start the AI right now. Close other apps and try again. Phones with less than 8 GB of memory may not manage it.');
+      if (m === 'timeout') throw new Error('The AI model took more than 3 minutes to load, so it was stopped. Close other apps and try again.');
       throw new Error('This phone could not start the AI model. Close other apps and try again.');
     }
     const images: string[] = [];
     for (const [i, url] of (a.images || []).entries()) {
-      const small = await shrinkTo(url, 896);
+      // Rooms are judged fine at a smaller size and it is several times faster; receipts need the detail to be read.
+      const small = await shrinkTo(url, a.detail === 'high' ? 896 : 672);
       const path = `ai-photo-${Date.now()}-${i}.jpg`;
       await Filesystem.writeFile({ path, directory: Directory.Cache, data: small.split(',')[1] });
       temp.push(path);
@@ -167,15 +204,24 @@ export async function askDevice(a: Ask): Promise<unknown> {
     const schema = capLists(a.schema) as object;
     // The grammar is what makes the answer valid JSON in exactly our shape. It is built here because the plugin's own
     // converter is missing on Android (calling it crashes the app).
-    const r = await c.completion({
+    stageNow = images.length ? (images.length > 1 ? 'Reading the photos' : 'Reading the photo') : 'Writing the answer';
+    const t2 = Date.now();
+    const r = await within(c.completion({
       messages: [{ role: 'system', content: a.system }, { role: 'user', content: text }],
       jinja: true, enable_thinking: false, grammar: schemaToGrammar(schema),
       n_predict: 400, temperature: 0, // no randomness: the same photo should give the same answer
       ...(images.length ? { media_paths_json: JSON.stringify(images) } : {}),
-    } as Parameters<LlamaContext['completion']>[0]);
+    } as Parameters<LlamaContext['completion']>[0]), ANSWER_LIMIT, 'timeout', () => { c.stopCompletion().catch(() => {}); }).catch(e => {
+      const m = String((e as Error)?.message);
+      note(`answer failed after ${secs(t2)}: ${m.slice(0, 200)}`);
+      if (m === 'timeout') throw new Error('The AI took more than 6 minutes, so it was stopped. Try fewer photos, or notes only. Settings has an AI log you can share.');
+      throw new Error('The AI stopped before it finished. Try again.');
+    });
+    const res = r as { tokens_evaluated?: number; tokens_predicted?: number };
+    note(`answer in ${secs(t2)}: read ${res.tokens_evaluated ?? '?'} tokens, wrote ${res.tokens_predicted ?? '?'}; total ${secs(started)}`);
     return extractJSON(String(r.content || r.text || ''));
   } finally {
-    busy = false;
+    busy = false; stageNow = '';
     for (const path of temp) Filesystem.deleteFile({ path, directory: Directory.Cache }).catch(() => {});
     idle = setTimeout(() => { unload().catch(() => {}); }, 120000); // give the memory back after two quiet minutes
   }
