@@ -10,14 +10,23 @@ import { clearDiagnostics, DEVICE_OK, diagnostics, gb, install, installed, isDow
 import { shareText } from '../share';
 import { applyHome, readHome, readReceiptAI, writeScope, type HomeGuess } from './tasks';
 
+// If the AI is not ready but the on-phone model is already on this phone (for example after the app's settings
+// were reset by a reinstall), use it instead of asking to set it up again. A working online setup is left alone.
+async function loadReady(): Promise<AiConfig> {
+  const c = await loadAi();
+  if (ready(c) || !DEVICE_OK || !(await installed().catch(() => false))) return c;
+  const n: AiConfig = { ...c, mode: 'device', deviceModel: MODEL.id };
+  await saveAi(n).catch(() => {});
+  return n;
+}
 const useAi = () => {
   const [c, setC] = useState<AiConfig | null>(null);
-  useEffect(() => { loadAi().then(setC).catch(() => setC(defaults())); }, []);
+  useEffect(() => { loadReady().then(setC).catch(() => setC(defaults())); }, []);
   return c;
 };
 const NAME = 'on-phone AI';
 const say = (e: unknown) => e instanceof Error ? e.message : 'Something went wrong.';
-const Off = ({ setup }: { setup?: () => void }) => <div className="ai-off"><p className="hint">AI can fill this in from photos and notes. Set it up once in Settings.</p>{setup && <button className="b g" onClick={setup}>Set up AI</button>}</div>;
+const Off = ({ setup }: { setup?: () => void }) => <div className="ai-off"><p className="hint">AI can fill this in from photos and notes. In Settings, choose the AI to use{DEVICE_OK ? ' (On this phone is free) and download its model once' : ''}.</p>{setup && <button className="b g" onClick={setup}>Set up AI</button>}</div>;
 const MAX_PHOTOS = 4;
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 // Seconds since `on` became true, so a long on-phone answer shows it is still working.
@@ -74,7 +83,7 @@ function DeviceModelCard({ c, up, toast }: { c: AiConfig; up: (o: Partial<AiConf
 export function AiSettings({ toast }: { toast: (s: string) => void }) {
   const [c, setC] = useState<AiConfig | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { loadAi().then(setC).catch(() => setC(defaults())); }, []);
+  useEffect(() => { loadReady().then(setC).catch(() => setC(defaults())); }, []);
   if (!c) return null;
   const up = (o: Partial<AiConfig>) => { const n = { ...c, ...o }; setC(n); saveAi(n).catch(() => toast('Could not save.')); };
   return <section className="panel"><h2>AI on this phone</h2><div className="fields">
