@@ -1,5 +1,5 @@
 import { App as CapApp } from '@capacitor/app';
-import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import React, { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { bioAvailable, loadLock, saveLock, type LockCfg } from './lock';
 import { LockScreen } from './LockScreen';
 import { applyLook, COLORS, type Look } from './theme';
@@ -49,6 +49,33 @@ function Tiers({ tiers, pick, setPick }: { tiers: Tier[]; pick: number; setPick:
 }
 const tierLabels = ['Floor (10% profit)', 'Quote this', 'Start high'];
 
+// Pinned to the bottom while you fill in the job, so the price is never five screens away. It hides once the
+// Pick your price section is on screen, and its button jumps straight there.
+function PriceBar({ target, label, price, perHour, laborPct }: { target: React.RefObject<HTMLElement | null>; label: string; price: number; perHour: number; laborPct: number }) {
+  const [shown, setShown] = useState(true);
+  useEffect(() => {
+    const el = target.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const o = new IntersectionObserver(([e]) => setShown(!e.isIntersecting), { threshold: 0.05 });
+    o.observe(el);
+    return () => o.disconnect();
+  }, [target]);
+  if (!shown) return null;
+  return <div className="pricebar" role="status" aria-live="polite">
+    <div className="pb-txt"><span className="pb-k">{label}</span><span className="pb-p">{money(price)}</span>
+      <span className="pb-m">{money2(perHour)}/hr · {Math.round(laborPct)}% labor</span></div>
+    <button className="b" onClick={() => target.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>See prices</button>
+  </div>;
+}
+
+// A panel that folds to one line. The summary says what is inside, so nothing important hides.
+function Fold({ title, summary, warn, open: start, children }: { title: string; summary: string; warn?: boolean; open?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(!!start);
+  return <details className="panel fold" open={open} onToggle={e => setOpen(e.currentTarget.open)}>
+    <summary><span className="fold-t">{title}</span><span className={'fold-s' + (warn ? ' warn' : '')}>{summary}</span></summary>
+    <div className="fold-b">{children}</div></details>;
+}
+
 function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set; go: (e: Estimate, lead?: string) => void; toast: (s: string) => void; setup: () => void; pipe: (l: Partial<Lead>, id: string) => void }) {
   const b = db.res, c = db.costs;
   const up = (o: Partial<typeof b>) => set(d => ({ ...d, res: { ...d.res, ...o } }));
@@ -75,6 +102,11 @@ function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set;
   const tiers = [r.floor, r.main.price, startHigh(r.high, r.main.price)].map((price, i) => ({ label: tierLabels[i], price }));
   const p = tiers[pick].price;
   const at = atPrice({ hours: r.main.hours, labor: r.labor, direct: r.direct }, c.overhead, p, r.rec?.perMonth ?? 1);
+  const results = useRef<HTMLElement>(null);
+  const added = ADD_ONS.filter(a => (b.addOns[a.id] ?? 0) > 0 && !a.in.includes(r.firstKind));
+  const addTotal = (r.first || r.main).add.total;
+  const crewN = Math.max(Math.floor(b.crew), 1);
+  const travel = [`${crewN} cleaner${crewN > 1 ? 's' : ''}`, b.drive ? `${b.drive} min drive` : 'no drive time', b.miles ? `${b.miles} mi` : '', b.rush ? 'rush' : '', b.sunday ? 'Sunday/holiday' : ''].filter(Boolean).join(' · ');
   const need = [!R.tiers.some(t => t[1] || t[2] || t[3]) && 'Your prices', !c.wage && 'Your crew pay and costs', !(c.speedStd || c.speedDeep || c.speedMove) && 'Your cleaning speeds'].filter(Boolean) as string[];
   const blank = !main0(r);
   return <>
@@ -91,12 +123,14 @@ function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set;
         {r.tierName && <div className="hint wide">{r.tierName}{r.manyBeds ? '. More bedrooms than this size usually has, so consider the next size up.' : ''}</div>}
         <Num label="Full baths" value={b.full} onChange={v => up({ full: v })} /><Num label="Half baths" value={b.half} onChange={v => up({ half: v })} />
         <label className="f wide">Condition<select value={b.cond} onChange={e => up({ cond: +e.target.value })}><option value={0}>Normal</option><option value={25}>Heavy: +25%</option><option value={35}>Heavier: +35%</option><option value={50}>Neglected or cluttered: +50%</option></select></label></>}
+    </div></section>
+    <Fold title="Crew and travel" summary={travel} warn={!b.drive}><div className="fields">
       <Num label="Cleaners on the job" value={b.crew} onChange={v => up({ crew: v })} /><Num label="Drive, round trip (min)" value={b.drive} onChange={v => up({ drive: v })} />
       <Num label="Miles, round trip" value={b.miles} onChange={v => up({ miles: v })} /><div />
       <Check label={`Rush, same-day or next-day${R.rush ? ` (+${R.rush}%)` : ''}`} value={b.rush} onChange={v => up({ rush: v })} />
       <Check label={`Sunday or holiday${R.sunday ? ` (+${R.sunday}%)` : ''}`} value={b.sunday} onChange={v => up({ sunday: v })} />
-    </div></section>
-    <section className="panel"><h2>Add-ons</h2>
+    </div></Fold>
+    <Fold title="Add-ons" summary={added.length || b.extras ? `${[...added.map(a => a.name), b.extras ? 'Quoted extras' : ''].filter(Boolean).join(', ')} · ${money(addTotal)}` : 'None added'} open={added.length > 0}>
       {ADD_ONS.map(a => {
         const inc = a.in.includes(r.firstKind);
         const price = R.addOns[a.id] ?? 0;
@@ -108,8 +142,9 @@ function ResidentialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set;
       })}
       <div className="fields" style={{ marginTop: 10 }}><Num wide label="Quoted extras ($)" value={b.extras} onChange={v => up({ extras: v })} hint="Exterior windows, pressure washing, junk haul-off" />
         {r.rec && <Check label="Repeat add-ons on every visit (otherwise first visit only)" value={b.repeat} onChange={v => up({ repeat: v })} />}</div>
-    </section>
-    <section className="panel">
+    </Fold>
+    {!blank && <PriceBar target={results} label={tierLabels[pick]} price={p} perHour={at.perHour} laborPct={at.laborPct} />}
+    <section className="panel results" ref={results}>
       {!blank && <><h2>Pick your price</h2>
       <p className="hint">Tap a price to see what it earns you, then send the one you want.</p>
       <Tiers tiers={tiers} pick={pick} setPick={setPick} />
@@ -152,6 +187,7 @@ function CommercialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set; 
   const tiers = [r.floor, r.price, startHigh(r.high, r.price)].map((price, i) => ({ label: tierLabels[i], price }));
   const p = r.price > 0 ? tiers[pick].price : 0;
   const at = atPrice({ hours: r.hours, labor: r.labor, direct: r.direct }, c.overhead, p, r.visitsMo, r.sqft);
+  const results = useRef<HTMLElement>(null);
   const need = [!c.wage && 'Your crew pay and costs', !(c.overhead || c.profit) && 'Your overhead and profit targets'].filter(Boolean) as string[];
   return <>
     {need.length > 0 && <Setup list={need} open={setup} />}
@@ -184,7 +220,8 @@ function CommercialBid({ db, set, go, toast, setup, pipe }: { db: DB; set: Set; 
     <details className="panel"><summary><b>Use my own numbers</b> <span className="hint">(override the math)</span></summary><div className="fields" style={{ marginTop: 8 }}>
       <Num label="Labor hours per visit" value={b.hoursOverride} onChange={v => up({ hoursOverride: v })} /><Num label="Price per sq ft, per visit ($)" value={b.sqftPrice} onChange={v => up({ sqftPrice: v })} /></div>
       {b.sqftPrice > 0 && r.price < r.floor && <div className="note">That price is under your {money(r.floor)} floor.</div>}</details>
-    <section className="panel">
+    {r.price > 0 && <PriceBar target={results} label={tierLabels[pick]} price={p} perHour={at.perHour} laborPct={at.laborPct} />}
+    <section className="panel results" ref={results}>
       {r.price > 0 && <><h2>Pick your price</h2>
       <p className="hint">Tap a price to see what it earns you, then send the one you want.</p>
       <Tiers tiers={tiers} pick={pick} setPick={setPick} />

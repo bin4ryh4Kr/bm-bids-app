@@ -106,8 +106,10 @@ export function AiBid({ b, apply, setup }: { b: ResBid; apply: (o: Partial<ResBi
   const [guess, setGuess] = useState<HomeGuess | null>(null);
   const [err, setErr] = useState('');
   const cam = useRef<HTMLInputElement>(null), gal = useRef<HTMLInputElement>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
   const secs = useElapsed(busy);
   if (!c) return null;
+  const open = photos.length > 0 || notesOpen || !!notes || busy || !!guess || !!err;
   const full = photos.length >= MAX_PHOTOS;
   const addPhotos = (more: string[]) => { setErr(''); setPhotos(p => [...p, ...more].slice(0, MAX_PHOTOS)); };
   const fromFiles = async (list: FileList | null) => {
@@ -124,7 +126,7 @@ export function AiBid({ b, apply, setup }: { b: ResBid; apply: (o: Partial<ResBi
   const ask = async () => { setBusy(true); setErr(''); setGuess(null); try { setGuess(await readHome(c, photos, notes)); } catch (e) { setErr(say(e)); } setBusy(false); };
   return <section className="panel ai"><div className="ai-head"><h2>AI walkthrough</h2>{ready(c) && <span className="pill plain">On this phone</span>}</div>
     {!ready(c) ? <Off setup={setup} /> : <>
-      <p className="hint">Take or add up to {MAX_PHOTOS} photos, add a few notes, and AI fills in the home details. Your price still comes from your rate sheet.</p>
+      <p className="hint">{open ? `Up to ${MAX_PHOTOS} photos and a few notes. AI fills in the home details; your price still comes from your rate sheet.` : 'Snap the rooms and AI fills in the home details.'}</p>
       {photos.length > 0 && <div className="thumbs">{photos.map((src, i) => <div className="thumb" key={i}><img src={src} alt={`Photo ${i + 1}`} /><button aria-label={`Remove photo ${i + 1}`} disabled={busy} onClick={() => setPhotos(p => p.filter((_, n) => n !== i))}>×</button></div>)}</div>}
       <div className="acts">
         <button className="b g" disabled={busy || full} onClick={take}>Take photo</button>
@@ -132,9 +134,10 @@ export function AiBid({ b, apply, setup }: { b: ResBid; apply: (o: Partial<ResBi
         <input ref={cam} type="file" accept="image/*" capture="environment" hidden onChange={e => { const l = e.target.files; fromFiles(l).finally(() => { e.target.value = ''; }); }} />
         <input ref={gal} type="file" accept="image/*" multiple hidden onChange={e => { const l = e.target.files; fromFiles(l).finally(() => { e.target.value = ''; }); }} />
       </div>
+      {!open ? <button className="linkb ai-notes-link" onClick={() => setNotesOpen(true)}>Or type notes instead</button> : <>
       <p className="hint ai-count">{photos.length ? `${photos.length} of ${MAX_PHOTOS} photos added${full ? '. Remove one to add another.' : ''}` : 'No photos yet. Notes alone work too.'}</p>
       <label className="f">Notes<textarea value={notes} placeholder="3 bed 2 bath, about 1,600 sq ft, two dogs, tenant moving out" onChange={e => setNotes(e.target.value)} /></label>
-      <div className="acts"><button className="b" disabled={busy || (!photos.length && !notes.trim())} onClick={ask}>{busy ? 'Working...' : 'Fill in the home details'}</button></div>
+      <div className="acts"><button className="b" disabled={busy || (!photos.length && !notes.trim())} onClick={ask}>{busy ? 'Working...' : 'Fill in the home details'}</button></div></>}
       {busy && <Working c={c} secs={secs} photos={photos.length > 0} />}
       {err && <div className="note bad">{err}</div>}
       {guess && <div className="ai-result"><div className="ai-result-h">AI suggests</div>
