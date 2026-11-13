@@ -6,7 +6,7 @@ set -e
 cd "$(dirname "$0")/.."
 target=node_modules/llama-cpp-capacitor
 [ -d "$target" ] || exit 0
-if grep -q "bm-bids patch" "$target/android/src/main/jni.cpp"; then
+if grep -q "bm_fast_core_count" "$target/android/src/main/jni.cpp" && grep -q "bm-bids patch" "$target/android/src/main/CMakeLists.txt"; then
   echo "llama-cpp-capacitor: already patched"
 else
   patch -p1 -d "$target" < patches/llama-cpp-capacitor-jni.patch
