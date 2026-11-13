@@ -155,8 +155,9 @@ input:focus,select:focus,textarea:focus{outline:0;border-color:var(--accent);box
 .hint{font-size:.78rem;line-height:1.45}
 .note{border-left:0;background:var(--soft);color:var(--ink);border-radius:12px;padding:10px 13px;margin:10px 0;line-height:1.45}
 .note.bad{background:var(--bad-bg);color:var(--bad)}
-.note a{color:var(--deep);font-weight:700}
-button.b,a.b{border-radius:13px;min-height:48px;padding:12px 16px;font-size:.95rem;letter-spacing:.005em;transition:transform .08s,opacity .12s,background-color .12s}
+.note a,.note button,.body p a{color:var(--deep);font-weight:700}
+.body p a{display:inline-block;padding:4px 0}
+button.b,a.b{border-radius:13px;min-height:48px;padding:12px 16px;font-size:.95rem;letter-spacing:.005em;transition:transform .08s,opacity .12s}
 button.b{box-shadow:0 1px 2px rgba(0,0,0,.08)}
 button.b:active,a.b:active,button.save:active,.tile:active,.card:active,.range>button:active{transform:scale(.985);opacity:.9}
 button.b.g{background:var(--soft);border-color:transparent;box-shadow:none}
@@ -181,7 +182,7 @@ button.save{border-radius:12px;min-height:44px;padding:10px 18px;box-shadow:0 1p
 .pill{padding:3px 9px;letter-spacing:.01em}
 .range{gap:8px}.range>div,.range>button{border-radius:13px}
 .check{min-height:44px;gap:11px;font-size:.95rem}
-.check input{width:22px;height:22px}
+.check input{width:24px;height:24px}
 .addon{padding:7px 0;gap:10px}
 .addon:last-of-type{border-bottom:0}
 .qty{min-height:46px}

@@ -431,7 +431,7 @@ function Settings({ db, set, toast, ask }: { db: DB; set: Set; toast: (s: string
     <section className="panel" style={{ textAlign: 'center' }}><img src="icon-192.png" alt="" width={72} height={72} style={{ borderRadius: 16 }} />
       <h2 style={{ margin: '8px 0 4px' }}>B&amp;M Bids is free</h2>
       <p className="hint" style={{ margin: 0 }}>Built by {MAKER.name}, a veteran-owned and woman-owned cleaning company in coastal North Carolina, for other cleaners. No account, no ads, and nothing leaves your phone unless you share it. Find businesses sends only the town and type you search.</p>
-      <p style={{ margin: '10px 0 0' }}><a href={MAKER.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontWeight: 700 }}>Visit {MAKER.site}</a></p></section></>;
+      <p style={{ margin: '10px 0 0' }}><a href={MAKER.url} target="_blank" rel="noreferrer" style={{ color: 'var(--deep)', fontWeight: 700 }}>Visit {MAKER.site}</a></p></section></>;
 }
 
 const Icon = ({ d }: { d: string }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
@@ -555,7 +555,7 @@ export default function App() {
   const openBid = (x: SavedBid) => { set(d => ({ ...d, ...(x.com ? { com: { ...DEFAULT_COM, ...x.com } } : {}), ...(x.res ? { res: { ...DEFAULT_RES, ...x.res } } : {}) })); setMode(x.mode); toast(`Opened ${x.name}.`); };
   const newBid = () => { set(d => mode === 'com' ? { ...d, com: { ...DEFAULT_COM } } : { ...d, res: { ...DEFAULT_RES, addOns: {} } }); toast('New bid.'); };
   const unpaid = db.invoices.filter(i => i.status === 'Unpaid');
-  const setup = !db.company.name && <div className="note">Add your business name in <a href="#" style={{ color: 'var(--accent)' }} onClick={e => { e.preventDefault(); open('set'); }}>Settings</a> so it prints on your PDFs.</div>;
+  const setup = !db.company.name && <div className="note">Add your business name in <a href="#" style={{ color: 'var(--deep)' }} onClick={e => { e.preventDefault(); open('set'); }}>Settings</a> so it prints on your PDFs.</div>;
 
   return <div className="app">
     <div className="top"><h1>{TITLES[tab]}</h1><div className="topacts"><button className="save" onClick={() => saver.current()}>Save</button><button className="gear" aria-label="Settings" onClick={() => open('set')}><Icon d={ICONS.set} /></button></div></div>
@@ -565,7 +565,7 @@ export default function App() {
           {db.bids.map(x => <div className="addon" key={x.id}><button className="linkrow" onClick={() => openBid(x)}><b>{x.name}</b><span className="hint">{x.mode === 'com' ? 'Commercial' : 'Residential'} · {niceDate(x.date)} · {money(x.price)}</span></button>
             <button className="b x" onClick={() => ask(`Delete saved bid ${x.name}?`, () => set(d => ({ ...d, bids: d.bids.filter(y => y.id !== x.id) })))}>Delete</button></div>)}
           <button className="b g" style={{ width: '100%', marginTop: 8 }} onClick={newBid}>Start a new bid</button></details>}
-        {usingIndustry(db.rates) && <div className="note">These are typical industry numbers, not yours yet. Change them in <a href="#" style={{ color: 'var(--accent)' }} onClick={e => { e.preventDefault(); open('set'); }}>Settings</a>.</div>}
+        {usingIndustry(db.rates) && <div className="note">These are typical industry numbers, not yours yet. Change them in <a href="#" style={{ color: 'var(--deep)' }} onClick={e => { e.preventDefault(); open('set'); }}>Settings</a>.</div>}
         <div className="seg"><button className={mode === 'res' ? 'on' : ''} onClick={() => setMode('res')}>Residential</button><button className={mode === 'com' ? 'on' : ''} onClick={() => setMode('com')}>Commercial</button></div>
         {mode === 'res' ? <ResidentialBid db={db} set={set} go={toEst} toast={toast} setup={() => open('set')} pipe={pipe} /> : <CommercialBid db={db} set={set} go={toEst} toast={toast} setup={() => open('set')} pipe={pipe} />}</>}
       {tab === 'est' && (est ? <EstimateEdit key={est.id} e0={est} db={db} set={set} back={() => setEst(null)} toast={toast} openInv={toInv} ask={ask} makeContract={makeContract} /> : <>

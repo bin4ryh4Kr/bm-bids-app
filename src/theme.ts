@@ -23,10 +23,16 @@ const DARK_INK = '#0b1415';
 export function palette(accent: string, dark: boolean) {
   const surface = dark ? '#142122' : '#ffffff', bg = dark ? '#0b1415' : '#f2f7f7';
   const on = contrast('#ffffff', accent) >= contrast(DARK_INK, accent) ? '#ffffff' : DARK_INK;
+  // The picked colour is nudged until button text can be read on it (4.5:1). Most colours barely move.
+  const fill = readable(accent, on);
+  const soft = mix(surface, accent, dark ? 0.18 : 0.12);
+  // deep is the accent as text. It has to read on the tinted soft background, which is the harder case
+  // (buttons, callouts); anything that passes there also passes on the plain surface.
+  const deep = readable(readable(accent, soft), surface);
   return {
     bg, surface, ink: dark ? '#e6efef' : '#0f1a1c', muted: dark ? '#9db2b1' : '#50605f',
-    line: mix(surface, accent, dark ? 0.28 : 0.2), accent, on, deep: readable(accent, surface), soft: mix(surface, accent, dark ? 0.18 : 0.12),
-    price2: mix(accent, on === '#ffffff' ? '#000000' : '#ffffff', 0.25),
+    line: mix(surface, accent, dark ? 0.28 : 0.2), accent: fill, on, deep, soft,
+    price2: mix(fill, on === '#ffffff' ? '#000000' : '#ffffff', 0.25),
   };
 }
 
