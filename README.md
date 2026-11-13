@@ -1,5 +1,5 @@
-<p align="center"><img src="docs/icon.png" width="128" alt="B&M Bids icon"></p>
-<h1 align="center">B&M Bids</h1>
+<p align="center"><img src="docs/icon.png" width="128" alt="BidBroom icon"></p>
+<h1 align="center">BidBroom</h1>
 <p align="center">A free all-in-one app for cleaning businesses. Find leads, price the job, send the proposal, sign the contract, schedule the crew and get paid.</p>
 <p align="center">Made by <a href="https://www.beautyandmusclepm.com/?utm_source=github&utm_medium=readme">Beauty &amp; Muscle</a>, a veteran-owned and woman-owned cleaning company in coastal North Carolina.</p>
 <p align="center"><img src="docs/bid.png" width="240" alt="Bid calculator"> <img src="docs/tools.png" width="240" alt="Business tools"></p>

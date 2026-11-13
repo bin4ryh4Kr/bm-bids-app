@@ -10,8 +10,8 @@ android {
         applicationId "com.beautyandmusclepm.bids"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 16
-        versionName "1.8.0"
+        versionCode 17
+        versionName "1.9.0"
         // Only the private AI build may talk to servers on your own network without https.
         manifestPlaceholders = [cleartext: project.hasProperty("aiBuild") ? "true" : "false"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"

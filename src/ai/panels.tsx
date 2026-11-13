@@ -74,7 +74,7 @@ function DeviceModelCard({ c, up, toast }: { c: AiConfig; up: (o: Partial<AiConf
     <div className="acts">
       {!have && done === null && <button className="b" onClick={start}>Download AI model</button>}
       {have && <button className="b g" onClick={async () => { await remove(); up({ deviceModel: '' }); toast('AI model removed.'); }}>Remove model</button>}
-      {have && <button className="b g" onClick={async () => { try { toast(await shareText('B&M Bids AI log', diagnostics())); } catch { toast('Could not share the log.'); } }}>Share AI log</button>}
+      {have && <button className="b g" onClick={async () => { try { toast(await shareText('BidBroom AI log', diagnostics())); } catch { toast('Could not share the log.'); } }}>Share AI log</button>}
     </div>
     {have && <p className="hint">The AI log holds timings and errors only, never your photos or notes. Share it if the AI is slow or stops. <button className="linkb" style={{ minHeight: 0, padding: 0, margin: 0 }} onClick={() => { clearDiagnostics(); toast('AI log cleared.'); }}>Clear log</button></p>}
   </div>;

@@ -95,7 +95,7 @@ const secs = (t0: number) => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
 /** Timings and errors only. No photos, notes or answers are ever written here. */
 export function diagnostics() {
   const nav = navigator as Navigator & { deviceMemory?: number };
-  return [`B&M Bids on-phone AI log`, `model ${MODEL.id}`, `phone ${nav.userAgent.replace(/^.*?\((.*?)\).*$/, '$1')}`,
+  return [`BidBroom on-phone AI log`, `model ${MODEL.id}`, `phone ${nav.userAgent.replace(/^.*?\((.*?)\).*$/, '$1')}`,
     `cores ${nav.hardwareConcurrency ?? '?'}, memory hint ${nav.deviceMemory ?? '?'} GB`, '', ...log].join('\n');
 }
 export const clearDiagnostics = () => { log = []; try { localStorage.removeItem(LOG_KEY); } catch { /* nothing to clear */ } };

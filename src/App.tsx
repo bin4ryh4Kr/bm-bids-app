@@ -467,20 +467,20 @@ function Settings({ db, set, toast, ask }: { db: DB; set: Set; toast: (s: string
       <div className="acts">
         <button className="b" onClick={async () => { try { const photos: Record<string, string> = {};
           for (const r of db.receipts) if (r.photo) photos[r.id] = await loadPhoto(r.id).catch(() => '');
-          await shareFile(`BM Bids backup ${today()}.json`, 'Backup', JSON.stringify({ ...db, photos }), 'json'); } catch { toast('Could not make the backup.'); } }}>Save backup</button>
+          await shareFile(`BidBroom backup ${today()}.json`, 'Backup', JSON.stringify({ ...db, photos }), 'json'); } catch { toast('Could not make the backup.'); } }}>Save backup</button>
         <button className="b g" onClick={() => file.current?.click()}>Restore backup</button>
         <input ref={file} type="file" accept=".json,application/json" hidden onChange={async e => {
           const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
           try {
             const text = await f.text(); const d = parseDB(text); const photos: Record<string, string> = JSON.parse(text).photos || {};
             ask('Replace everything on this phone with this backup?', () => { set(() => d); Object.entries(photos).forEach(([id, p]) => { if (p) savePhoto(id, p).catch(() => {}); }); toast('Backup restored.'); });
-          } catch { toast('That file is not a B&M Bids backup.'); }
+          } catch { toast('That file is not a BidBroom backup.'); }
         }} />
       </div>
       <div className="acts"><button className="b g" onClick={() => ask('Clear all your costs, speeds and bid forms?', () => { up({ ...DEFAULT_COSTS }); set(d => ({ ...d, com: { ...DEFAULT_COM }, res: { ...DEFAULT_RES, addOns: {} } })); })}>Clear costs and bid forms</button></div>
     </section>
     <section className="panel" style={{ textAlign: 'center' }}><img src="icon-192.png" alt="" width={72} height={72} style={{ borderRadius: 16 }} />
-      <h2 style={{ margin: '8px 0 4px' }}>B&amp;M Bids is free</h2>
+      <h2 style={{ margin: '8px 0 4px' }}>BidBroom is free</h2>
       <p className="hint" style={{ margin: 0 }}>Built by {MAKER.name}, a veteran-owned and woman-owned cleaning company in coastal North Carolina, for other cleaners. No account, no ads, and nothing leaves your phone unless you share it. Find businesses sends only the town and type you search.</p>
       <p style={{ margin: '10px 0 0' }}><a href={MAKER.url} target="_blank" rel="noreferrer" style={{ color: 'var(--deep)', fontWeight: 700 }}>Visit {MAKER.site}</a></p></section></>;
 }
@@ -605,7 +605,10 @@ export default function App() {
     });
     return name;
   };
-  // On the Bid tab, Save files the bid under Saved bids and opens a fresh one. Elsewhere it just saves.
+  // Save always moves you on, so you can see it went somewhere. Bid tab: file the bid under Saved bids and
+  // open a blank one. An open estimate, invoice, lead, contract, receipt, trip, shift, timesheet or crew
+  // member: close it and show the list it was saved to (a never-filled-in estimate or invoice is dropped
+  // instead of cluttering the list). Settings: back to the Bid tab. Every edit is already stored as you type.
   const saveNow = async () => {
     if (tab === 'bid') {
       // A blank form (for example right after a save) has nothing worth filing.
@@ -613,7 +616,26 @@ export default function App() {
       if (empty) { toast('Nothing to save yet.'); return; }
       const name = saveBid(); newBid(true); toast(`Saved ${name}. Started a new bid.`); return;
     }
-    try { await saveDB(db); toast('Saved.'); } catch { toast('Could not save.'); }
+    try { await saveDB(db); } catch { toast('Could not save.'); return; }
+    const blankDoc = (d: Estimate | Invoice) => !d.client.name.trim() && !d.items.some(x => x.name.trim() || x.price);
+    if (est) {
+      const e = db.estimates.find(x => x.id === est.id) ?? est;
+      setEst(null);
+      if (blankDoc(e)) { set(d => ({ ...d, estimates: d.estimates.filter(x => x.id !== e.id) })); toast('Nothing filled in, so it was not kept.'); }
+      else toast(`Estimate ${e.number} saved to Estimates.`);
+      return;
+    }
+    if (inv) {
+      const i = db.invoices.find(x => x.id === inv.id) ?? inv;
+      setInv(null);
+      // Give the number back when it was the last one handed out, so invoice numbers stay in order.
+      if (blankDoc(i)) { set(d => ({ ...d, invoices: d.invoices.filter(x => x.id !== i.id), nextInvoice: i.number === `INV-${d.nextInvoice - 1}` ? d.nextInvoice - 1 : d.nextInvoice })); toast('Nothing filled in, so it was not kept.'); }
+      else toast(`Invoice ${i.number} saved to Invoices.`);
+      return;
+    }
+    if (sub) { setSub(''); toast(`Saved to ${TITLES[tab]}.`); return; }
+    if (tab === 'set') { open('bid'); toast('Settings saved.'); return; }
+    toast('Everything is saved.');
   };
   saver.current = saveNow;
   const openBid = (x: SavedBid) => { set(d => ({ ...d, ...(x.com ? { com: { ...DEFAULT_COM, ...x.com } } : {}), ...(x.res ? { res: { ...DEFAULT_RES, ...x.res } } : {}) })); setMode(x.mode); toast(`Opened ${x.name}.`); };
