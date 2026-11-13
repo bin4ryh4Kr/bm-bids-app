@@ -607,7 +607,12 @@ export default function App() {
   };
   // On the Bid tab, Save files the bid under Saved bids and opens a fresh one. Elsewhere it just saves.
   const saveNow = async () => {
-    if (tab === 'bid') { const name = saveBid(); newBid(true); toast(`Saved ${name}. Started a new bid.`); return; }
+    if (tab === 'bid') {
+      // A blank form (for example right after a save) has nothing worth filing.
+      const empty = mode === 'com' ? !db.com.client.trim() && !db.com.sqft && !db.com.rooms.some(x => x.sqft > 0) : !db.res.client.trim() && !db.res.sqft && !db.res.hours;
+      if (empty) { toast('Nothing to save yet.'); return; }
+      const name = saveBid(); newBid(true); toast(`Saved ${name}. Started a new bid.`); return;
+    }
     try { await saveDB(db); toast('Saved.'); } catch { toast('Could not save.'); }
   };
   saver.current = saveNow;
