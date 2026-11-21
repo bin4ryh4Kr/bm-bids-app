@@ -90,7 +90,7 @@ function footers(d: jsPDF, form: string, co: Company) {
     d.text([co.name, co.city].filter(Boolean).join('  |  '), M, 760);
     d.text([co.phone, co.email, co.web].filter(Boolean).join('  |  '), M, 769);
     d.text(`${form}  |  Pg ${p} of ${n}`, W - M, 769, { align: 'right' });
-    d.setFontSize(6.5).setTextColor(140).textWithLink(`Made with B&M Bids, free from ${MAKER.name} (${MAKER.site})`, M, 779, { url: MAKER.url });
+    d.setFontSize(6.5).setTextColor(140).textWithLink(`Made with BidBroom, free from ${MAKER.name} (${MAKER.site})`, M, 779, { url: MAKER.url });
   }
 }
 

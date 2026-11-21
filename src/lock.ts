@@ -43,7 +43,7 @@ export async function bioAvailable() {
   try { return (await BiometricAuth.checkBiometry()).isAvailable; } catch { return false; }
 }
 export async function bioUnlock() {
-  try { await BiometricAuth.authenticate({ reason: 'Unlock B&M Bids', cancelTitle: 'Use PIN', androidTitle: 'Unlock B&M Bids', allowDeviceCredential: false }); return true; } catch { return false; }
+  try { await BiometricAuth.authenticate({ reason: 'Unlock BidBroom', cancelTitle: 'Use PIN', androidTitle: 'Unlock BidBroom', allowDeviceCredential: false }); return true; } catch { return false; }
 }
 
 export async function eraseEverything() {

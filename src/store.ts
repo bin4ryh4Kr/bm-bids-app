@@ -14,7 +14,7 @@ export const freshDB = (): DB => ({ costs: INDUSTRY_COSTS(), com: { ...DEFAULT_C
 const KEY = 'bm-bids-db-v1';
 export function parseDB(text: string): DB {
   const d = JSON.parse(text);
-  if (!d || !Array.isArray(d.estimates) || !Array.isArray(d.invoices)) throw new Error('Not a B&M Bids backup');
+  if (!d || !Array.isArray(d.estimates) || !Array.isArray(d.invoices)) throw new Error('Not a BidBroom backup');
   const f = freshDB();
   return { ...f, ...d, costs: { ...f.costs, ...d.costs }, com: { ...f.com, ...d.com }, res: { ...f.res, ...d.res }, company: { ...f.company, ...d.company }, rates: { ...f.rates, ...d.rates }, look: { ...f.look, ...d.look } };
 }

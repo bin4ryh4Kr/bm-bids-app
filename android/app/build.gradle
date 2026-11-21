@@ -1,21 +1,24 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.beautyandmusclepm.bids"
-    compileSdk rootProject.ext.compileSdkVersion
+    namespace = "com.beautyandmusclepm.bids"
+    compileSdk = rootProject.ext.compileSdkVersion
+    // The same NDK the llama.cpp plugin is compiled with. Naming it here lets release builds strip the
+    // engine's debug symbols (86 MB down to a few MB).
+    ndkVersion = "29.0.13113456"
     defaultConfig {
         applicationId "com.beautyandmusclepm.bids"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "1.7.0"
+        versionCode 17
+        versionName "1.9.0"
         // Only the private AI build may talk to servers on your own network without https.
         manifestPlaceholders = [cleartext: project.hasProperty("aiBuild") ? "true" : "false"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
     // Release signing uses the key kept outside this repo. Without it, only debug builds work.
